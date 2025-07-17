@@ -1,0 +1,213 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kindergarten Bibliothek</title>
+  <style>
+    body { font-family: sans-serif; background: #f2f2f2; margin: 0; padding: 1rem; }
+    h1 { text-align: center; }
+    input, button, select { margin: 0.4rem 0; padding: 0.6rem; font-size: 1rem; width: 100%; }
+    .book { background: #fff; padding: 1rem; margin-top: 1rem; border-radius: 8px; box-shadow: 0 0 4px rgba(0,0,0,0.1); }
+    .hidden { display: none; }
+    .admin { background: #fff; margin-top: 2rem; padding: 1rem; border: 1px solid #ccc; }
+    .log { background: #eee; padding: 0.5rem; white-space: pre-wrap; font-size: 0.9rem; }
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+             background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 10; }
+    .modal-content { background: white; padding: 1rem; border-radius: 8px; width: 90%; max-width: 400px; text-align: center; }
+    .edit-fields input, .edit-fields button { margin: 0.3rem 0; }
+    .cover { width: 120px; display: block; margin: 0.5rem 0; border: 1px solid #ccc; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Kindergarten Bibliothek</h1>
+
+  <input type="text" id="search" placeholder="🔍 Suchen nach Titel, Kategorie oder Schlagwort..." />
+  <div id="book-list"></div>
+
+  <button onclick="toggleAdmin()">🔐 Admin-Modus</button>
+  <div id="admin" class="admin hidden">
+    <h2>Admin-Bereich</h2>
+    <div id="admin-login">
+      <label>Passwort: <input type="password" id="admin-pw" /></label>
+      <button onclick="checkAdmin()">Einloggen</button>
+    </div>
+
+    <div id="admin-panel" class="hidden">
+      <button onclick="logoutAdmin()">🚪 Abmelden</button>
+      <h3>Neues Buch hinzufügen</h3>
+      <input id="new-id" placeholder="ID (z. B. B-010)" />
+      <input id="new-title" placeholder="Titel" />
+      <input id="new-cat" placeholder="Kategorie" />
+      <input id="new-keywords" placeholder="Schlagworte" />
+      <button onclick="addBook()">➕ Hinzufügen</button>
+
+      <h3>Ausleihverlauf</h3>
+      <div class="log" id="log-output"></div>
+    </div>
+  </div>
+
+  <div id="modal" class="modal">
+    <div class="modal-content" id="modal-content"></div>
+  </div>
+
+<script>
+let books = [
+  {id:"B-001", title:"Titel 1", category:"Bilderbuch", keywords:"Löwe, Elefant", status:"im Schrank", img:""},
+  {id:"B-002", title:"Titel 2", category:"Sachbuch", keywords:"Ritter, Pferd", status:"im Schrank", img:""}
+];
+
+let log = [];
+let adminMode = false;
+
+const groups = [
+  {name:"Sterne", symbol:"⭐️"},
+  {name:"Sonne", symbol:"☀️"},
+  {name:"Schneeflocken", symbol:"❄️"},
+  {name:"Regentropfen", symbol:"💧"},
+  {name:"Mond", symbol:"🌙"},
+  {name:"Regenbogen", symbol:"🌈"},
+  {name:"Sprache", symbol:"🗣️"}
+];
+
+function renderBooks(filter = "") {
+  const list = document.getElementById("book-list");
+  list.innerHTML = "";
+  books.forEach((book, index) => {
+    const match = (book.id + book.title + book.category + book.keywords).toLowerCase();
+    if (match.includes(filter.toLowerCase())) {
+      const div = document.createElement("div");
+      div.className = "book";
+      div.innerHTML = `
+        <strong>${book.id} – ${book.title}</strong><br>
+        Kategorie: ${book.category}<br>
+        Schlagworte: ${book.keywords}<br>
+        Status: ${book.status}<br>
+        ${book.img ? `<img src="${book.img}" class="cover" />` : ""}
+        <button onclick="showAusleihPopup(${index})">📦 Ausleihen</button>
+        <button onclick="zurueck(${index})">📚 Zurückstellen</button>
+        ${adminMode ? `
+          <div class="admin-controls">
+            <button onclick="bearbeiten(${index})">✏️ Bearbeiten</button>
+            <button onclick="loeschen(${index})">🗑️ Löschen</button>
+            <div id="edit-${index}" class="edit-fields hidden">
+              <input id="edit-id-${index}" value="${book.id}" />
+              <input id="edit-title-${index}" value="${book.title}" />
+              <input id="edit-cat-${index}" value="${book.category}" />
+              <input id="edit-keys-${index}" value="${book.keywords}" />
+              <input type="file" accept="image/*" capture="environment" onchange="bildLaden(event, ${index})" />
+              <button onclick="speichern(${index})">💾 Speichern</button>
+            </div>
+          </div>` : ""}
+      `;
+      list.appendChild(div);
+    }
+  });
+}
+
+function bearbeiten(index) {
+  document.getElementById("edit-" + index).classList.toggle("hidden");
+}
+
+function speichern(index) {
+  books[index].id = document.getElementById("edit-id-" + index).value;
+  books[index].title = document.getElementById("edit-title-" + index).value;
+  books[index].category = document.getElementById("edit-cat-" + index).value;
+  books[index].keywords = document.getElementById("edit-keys-" + index).value;
+  log.push(`${new Date().toLocaleString()}: ${books[index].id} gespeichert`);
+  renderBooks(document.getElementById("search").value);
+  updateLog();
+}
+
+function bildLaden(event, index) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    books[index].img = e.target.result;
+    renderBooks(document.getElementById("search").value);
+  };
+  reader.readAsDataURL(event.target.files[0]);
+}
+
+function loeschen(index) {
+  if (confirm("Dieses Buch wirklich löschen?")) {
+    log.push(`${new Date().toLocaleString()}: ${books[index].id} gelöscht`);
+    books.splice(index, 1);
+    renderBooks(document.getElementById("search").value);
+    updateLog();
+  }
+}
+
+function showAusleihPopup(index) {
+  const modal = document.getElementById("modal");
+  const content = document.getElementById("modal-content");
+  content.innerHTML = `<h3>Gruppe wählen</h3>
+    ${groups.map(g => `<button onclick="ausleihen(${index}, '${g.name}')">${g.symbol}</button>`).join("")}
+    <br><br><button onclick="closeModal()">Abbrechen</button>`;
+  modal.style.display = "flex";
+}
+
+function closeModal() {
+  document.getElementById("modal").style.display = "none";
+}
+
+function ausleihen(index, gruppe) {
+  books[index].status = "ausgeliehen an " + gruppe;
+  log.push(`${new Date().toLocaleString()}: ${books[index].id} an ${gruppe} ausgeliehen`);
+  closeModal();
+  renderBooks(document.getElementById("search").value);
+  updateLog();
+}
+
+function zurueck(index) {
+  books[index].status = "im Schrank";
+  log.push(`${new Date().toLocaleString()}: ${books[index].id} zurückgestellt`);
+  renderBooks(document.getElementById("search").value);
+  updateLog();
+}
+
+function toggleAdmin() {
+  document.getElementById("admin").classList.toggle("hidden");
+}
+
+function checkAdmin() {
+  const pw = document.getElementById("admin-pw").value;
+  if (pw === "2025") {
+    adminMode = true;
+    document.getElementById("admin-login").classList.add("hidden");
+    document.getElementById("admin-panel").classList.remove("hidden");
+    renderBooks(document.getElementById("search").value);
+    updateLog();
+  } else {
+    alert("❌ Falsches Passwort");
+  }
+}
+
+function logoutAdmin() {
+  adminMode = false;
+  document.getElementById("admin-login").classList.remove("hidden");
+  document.getElementById("admin-panel").classList.add("hidden");
+  renderBooks(document.getElementById("search").value);
+}
+
+function addBook() {
+  const id = document.getElementById("new-id").value.trim();
+  const title = document.getElementById("new-title").value.trim();
+  const cat = document.getElementById("new-cat").value.trim();
+  const keys = document.getElementById("new-keywords").value.trim();
+  if (!id || !title) return alert("Bitte ID und Titel angeben");
+  books.push({id, title, category: cat, keywords: keys, status: "im Schrank", img:""});
+  log.push(`${new Date().toLocaleString()}: ${id} hinzugefügt`);
+  renderBooks(document.getElementById("search").value);
+  updateLog();
+}
+
+function updateLog() {
+  document.getElementById("log-output").textContent = log.join("\n");
+}
+
+document.getElementById("search").addEventListener("input", e => renderBooks(e.target.value));
+renderBooks();
+</script>
+</body>
+</html>
