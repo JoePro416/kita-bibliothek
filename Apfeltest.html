@@ -152,7 +152,7 @@ function closeModal() {
 }
 
 function ausleihen(index, gruppe) {
-  books[index].status = "ausgeliehen an " + gruppe;
+  books[index].status = "ausgeliehen von " + gruppe;
   log.push(`${new Date().toLocaleString()}: ${books[index].id} an ${gruppe} ausgeliehen`);
   closeModal();
   renderBooks(document.getElementById("search").value);
